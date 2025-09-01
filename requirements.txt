@@ -1,0 +1,16 @@
+
+open-clip-torch
+datasets
+huggingface_hub
+Pillow==10.1.0
+opencv-contrib-python==4.5.5.62
+diffusers
+clip-anytorch 
+autokeras==1.0.20 
+tensorflow==2.9
+onnxruntime-gpu
+openpyxl
+onnx2pytorch
+tf2onnx
+pydload
+foolbox==3.1.1

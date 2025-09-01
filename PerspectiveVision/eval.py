@@ -1,0 +1,246 @@
+import argparse
+import torch
+import sys
+from PIL import Image
+from pathlib import Path
+import requests
+from PIL import Image
+from io import BytesIO
+import re, sys, os, json
+import tqdm
+from sklearn.metrics import accuracy_score, f1_score
+
+current_file_path = Path(__file__).resolve()
+parent_directory = current_file_path.parent.parent
+sys.path.append(str(parent_directory))
+from unsafe_datasets import *
+from utils import *
+
+from llava.constants import (
+    IMAGE_TOKEN_INDEX,
+    DEFAULT_IMAGE_TOKEN,
+    DEFAULT_IM_START_TOKEN,
+    DEFAULT_IM_END_TOKEN,
+    IMAGE_PLACEHOLDER,
+)
+from llava.conversation import conv_templates, SeparatorStyle
+from llava.model.builder import load_pretrained_model
+from llava.utils import disable_torch_init
+from llava.mm_utils import (
+    process_images,
+    tokenizer_image_token,
+    get_model_name_from_path,
+    KeywordsStoppingCriteria,
+)
+
+def image_parser(args):
+    out = args.image_file.split(args.sep)
+    return out
+
+def load_image(image_file):
+    if image_file.startswith("http") or image_file.startswith("https"):
+        response = requests.get(image_file)
+        image = Image.open(BytesIO(response.content)).convert("RGB")
+    else:
+        image = Image.open(image_file).convert("RGB")
+    return image
+
+def load_images(image_files):
+    out = []
+    for image_file in image_files:
+        image = load_image(image_file)
+        out.append(image)
+    return out
+
+def main(args):
+    
+    categories, instructions = list_unsafe_instruction()
+    prompt_template = open(args.prompt_template_dir, "r").read()
+
+    if args.chosen_categories == ["all"]:
+        args.chosen_categories = categories
+    
+    print("chosen categories:", args.chosen_categories)
+    instructs = [instructions[categories.index(category)] for category in args.chosen_categories]
+    final_prompt = prompt_template.replace("[instruction]", "\n".join(instructs))
+    
+    print("<<< prompt: ", final_prompt)
+    # load Model
+    disable_torch_init()
+    
+    if os.path.exists(args.model_path) is False:
+        from huggingface_hub import snapshot_download
+        
+        repo_id = "yiting/PerspectiveVision-LLaVA-LoRA"
+        snapshot_download(repo_id=repo_id,
+                        repo_type="model",
+                        local_dir=args.model_path)
+    
+    tokenizer, model, image_processor, context_len = load_pretrained_model(
+        args.model_path, args.model_base, args.model_name
+    )
+
+    if hasattr(model.config, "use_flash_attn"):
+        model.config.use_flash_attn = True
+    
+    def generate(image_file, prompt):
+        qs = prompt
+        args.image_file = image_file
+        # qs = args.query
+        image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+        if IMAGE_PLACEHOLDER in qs:
+            if model.config.mm_use_im_start_end:
+                qs = re.sub(IMAGE_PLACEHOLDER, image_token_se, qs)
+            else:
+                qs = re.sub(IMAGE_PLACEHOLDER, DEFAULT_IMAGE_TOKEN, qs)
+        else:
+            if model.config.mm_use_im_start_end:
+                qs = image_token_se + "\n" + qs
+            else:
+                qs = DEFAULT_IMAGE_TOKEN + "\n" + qs
+
+        if "llama-2" in args.model_name.lower():
+            conv_mode = "llava_llama_2"
+        elif "v1" in args.model_name.lower():
+            conv_mode = "llava_v1"
+        elif "mpt" in args.model_name.lower():
+            conv_mode = "mpt"
+        else:
+            conv_mode = "llava_v0"
+
+        if args.conv_mode is not None and conv_mode != args.conv_mode:
+            print(
+                "[WARNING] the auto inferred conversation mode is {}, while `--conv-mode` is {}, using {}".format(
+                    conv_mode, args.conv_mode, args.conv_mode
+                )
+            )
+        else:
+            args.conv_mode = conv_mode
+
+        conv = conv_templates[args.conv_mode].copy()
+        conv.append_message(conv.roles[0], qs)
+        conv.append_message(conv.roles[1], None)
+        prompt = conv.get_prompt()
+
+        image_files = image_parser(args)
+        images = load_images(image_files)
+        images_tensor = process_images(
+            images,
+            image_processor,
+            model.config
+        ).to(model.device, dtype=torch.float16)
+
+        input_ids = (
+            tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt")
+            .unsqueeze(0)
+            .cuda()
+        )
+
+        stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
+        keywords = [stop_str]
+        stopping_criteria = KeywordsStoppingCriteria(keywords, tokenizer, input_ids)
+
+        with torch.inference_mode():
+            output_ids = model.generate(
+                input_ids,
+                images=images_tensor,
+                do_sample=True if args.temperature > 0 else False,
+                temperature=args.temperature,
+                top_p=args.top_p,
+                num_beams=args.num_beams,
+                max_new_tokens=args.max_new_tokens,
+                use_cache=True,
+                stopping_criteria=[stopping_criteria],
+            )
+        input_token_len = input_ids.shape[1]
+        n_diff_input_output = (input_ids != output_ids[:, :input_token_len]).sum().item()
+        if n_diff_input_output > 0:
+            print(
+                f"[Warning] {n_diff_input_output} output_ids are not the same as the input_ids"
+            )
+        outputs = tokenizer.batch_decode(
+            output_ids[:, input_token_len:], skip_special_tokens=True
+        )[0]
+        outputs = outputs.strip()
+        if outputs.endswith(stop_str):
+            outputs = outputs[: -len(stop_str)]
+        outputs = outputs.strip()
+        return outputs
+    
+    result_df = pd.DataFrame()
+    
+    for dataset_name in args.dataset_names:
+        # load dataset
+        dataset = fetch_evaluation_dataset(dataset_name=dataset_name)
+        labels = [item["label"] if "label" in item else item[-1] for item in dataset]
+        result = []
+        
+        predictions = []
+        # enumerate each dataset
+        for item in tqdm.tqdm(dataset):
+            try:
+                image_fname = item[0]
+            except:
+                image_fname = item["image_fname"]
+
+            response = generate(image_file=image_fname, prompt=final_prompt)
+            
+            result.append({
+                "image_fname": image_fname.replace(args.image_folder+"/", ""),
+                "response": response
+            })
+            
+            parts = [part.strip() for part in response.split(',')]
+            safety_status = parts[0].split(':')[-1].strip()
+            unsafe_category = parts[-1].split(':')[-1].strip()
+
+            if "Unsafe" in safety_status:
+                pred = 1
+            elif "Safe" in safety_status :
+                pred = 0
+            else:
+                pred = random.choice([0, 1])
+            predictions.append(pred)
+        
+        Path(args.save_dir).mkdir(exist_ok=True, parents=True)
+        json.dump(result, open(os.path.join(args.save_dir, f"{dataset_name}.json"), "w"))
+        print(f"saved to {args.save_dir}")
+        
+        # calculate metrics
+        labels = np.array(labels)
+        predictions = np.array(predictions)
+        f1 = f1_score(labels, predictions)
+        
+        print(f"{dataset_name} f1: ", np.round(f1, 3))
+    
+        result_df.loc[dataset_name, "f1"] = np.round(f1, 3)
+        
+    print("Overall result:")
+    print(result_df)
+    
+        
+if __name__ == "__main__":
+    
+    parser = argparse.ArgumentParser()
+    # customized
+    parser.add_argument("--dataset_names", nargs="+", default=["UnsafeBench_test", "SMID", "NSFWDataset", "MultiHeaded_Dataset", "Violence_Dataset", "Self-harm_Dataset"])
+    parser.add_argument("--prompt_template_dir", type=str, default="prompts/prompt_template.txt")
+    parser.add_argument("--save_dir", type=str, default="outputs/perspective_vision")
+    parser.add_argument("--image_folder", type=str, default="")
+    parser.add_argument("--chosen_categories", type=list, default=["all"])
+
+    # default
+    parser.add_argument("--model-path", type=str, default="checkpoints/llava_lora")
+    parser.add_argument("--model-base", type=str, default="liuhaotian/llava-v1.5-7b")
+    parser.add_argument("--model-name", type=str, default="llava_v1.5_lora")
+    
+    parser.add_argument("--conv-mode", type=str, default=None)
+    parser.add_argument("--sep", type=str, default=",")
+    parser.add_argument("--temperature", type=float, default=0)
+    parser.add_argument("--top_p", type=float, default=None)
+    parser.add_argument("--num_beams", type=int, default=1)
+    parser.add_argument("--max_new_tokens", type=int, default=512)
+    args = parser.parse_args()
+
+    main(args)
+    
