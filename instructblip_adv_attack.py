@@ -121,8 +121,8 @@ for source in SOURCES:
             is_adv_list.extend([bool(val) for val in is_adv])
 
         result = {"is_adv": is_adv_list}
-        json.dump(result, open(f"{args.save_dir}/instructblip_{args.source}_{args.attack_type}_{args.seed}.json", "w"))
-        print(f"Results saved to {args.save_dir}/instructblip_{args.source}_{args.attack_type}_{args.seed}.json")
+        json.dump(result, open(f"{args.save_dir}/instructblip_{source}_{attack_type}_{args.seed}.json", "w"))
+        print(f"Results saved to {args.save_dir}/instructblip_{source}_{attack_type}_{args.seed}.json")
         
         result_df.loc[source, attack_type] = np.mean(is_adv_list)
         print(source, attack_type, "Robust Accuracy:", np.round(np.mean(is_adv_list), 3))

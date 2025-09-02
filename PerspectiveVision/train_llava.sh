@@ -6,7 +6,7 @@ deepspeed $DIR/llava/train/train_mem.py \
     --deepspeed ./zero3.json \
     --model_name_or_path liuhaotian/llava-v1.5-7b \
     --version v1 \
-    --data_path instructions_v1_negative_sampling_x1.json \
+    --data_path prompts/training_prompts.json \
     --image_folder $DIR \
     --vision_tower openai/clip-vit-large-patch14-336 \
     --mm_projector_type mlp2x_gelu \
@@ -18,12 +18,12 @@ deepspeed $DIR/llava/train/train_mem.py \
     --bf16 True \
     --output_dir $DIR/checkpoints/llava_lora \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 16 \
-    --per_device_eval_batch_size 26 \
-    --gradient_accumulation_steps 1 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
+    --gradient_accumulation_steps 2 \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
-    --save_steps 5000 \
+    --save_steps 500 \
     --save_total_limit 1 \
     --learning_rate 2e-4 \
     --weight_decay 0. \

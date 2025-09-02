@@ -225,12 +225,12 @@ if __name__ == "__main__":
     # customized
     parser.add_argument("--dataset_names", nargs="+", default=["UnsafeBench_test", "SMID", "NSFWDataset", "MultiHeaded_Dataset", "Violence_Dataset", "Self-harm_Dataset"])
     parser.add_argument("--prompt_template_dir", type=str, default="prompts/prompt_template.txt")
-    parser.add_argument("--save_dir", type=str, default="outputs/perspective_vision")
+    parser.add_argument("--save_dir", type=str, default="../outputs/perspective_vision")
     parser.add_argument("--image_folder", type=str, default="")
     parser.add_argument("--chosen_categories", type=list, default=["all"])
 
     # default
-    parser.add_argument("--model-path", type=str, default="checkpoints/llava_lora")
+    parser.add_argument("--model-path", type=str, default="../checkpoints/llava_lora")
     parser.add_argument("--model-base", type=str, default="liuhaotian/llava-v1.5-7b")
     parser.add_argument("--model-name", type=str, default="llava_v1.5_lora")
     

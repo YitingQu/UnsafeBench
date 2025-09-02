@@ -758,6 +758,9 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
 def train():
     global local_rank
 
+    import wandb
+    wandb.init(mode="disabled")
+
     parser = transformers.HfArgumentParser(
         (ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()

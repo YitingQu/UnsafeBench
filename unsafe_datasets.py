@@ -180,8 +180,11 @@ class UnsafeBenchDataset(Dataset):
         for idx, item in enumerate(tqdm.tqdm(dataset)):
             image = item["image"]
             # Convert to RGB if not already
+            if image.mode == "P":
+                image = image.convert("RGBA")
             if image.mode != "RGB":
                 image = image.convert("RGB")
+                
             image_id = item.get("id", str(idx))
             image_filename = f"{image_id}.png"
             image.save(os.path.join(save_path, image_filename))
