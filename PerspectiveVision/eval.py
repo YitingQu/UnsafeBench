@@ -168,6 +168,7 @@ def main(args):
         return outputs
     
     result_df = pd.DataFrame()
+    labels_all, predictions_all = [], []
     
     for dataset_name in args.dataset_names:
         # load dataset
@@ -213,8 +214,11 @@ def main(args):
         
         print(f"{dataset_name} f1: ", np.round(f1, 3))
     
-        result_df.loc[dataset_name, "f1"] = np.round(f1, 3)
-        
+        labels_all.extend(labels)
+        predictions_all.extend(predictions)
+    
+    overall_f1 = f1_score(np.array(labels_all), np.array(predictions_all))
+    result_df.loc["Overall", "f1"] = np.round(overall_f1, 3)
     print("Overall result:")
     print(result_df)
     

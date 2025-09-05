@@ -14,17 +14,28 @@ sys.path.append(str(parent_directory))
 from unsafe_datasets import *
 from utils import *
 
+def setup_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
-def design_prompt_template(augment_mode, prompt_template, image_label, image_category, category2instruction):
 
+def design_prompt_template(idx, augment_mode, prompt_template, image_label, image_category, category2instruction):
+
+    setup_seed(idx)
+        
     all_categories = list(category2instruction.keys())
     held_out_categories = all_categories.copy()
     held_out_categories.remove(image_category)
     random.shuffle(held_out_categories)
     
-    sample_num = random.choice(range(1, len(held_out_categories)))
-    sample_categories = held_out_categories[:sample_num]
+    k_min = 1
+    k_max = max(1, len(held_out_categories))
+    sample_num = random.randint(k_min, k_max)  # inclusive
 
+    sample_categories = held_out_categories[:sample_num]
+    
     if augment_mode == "original":
         # add the image category itself
         sample_categories.append(image_category)
@@ -43,7 +54,8 @@ def design_prompt_template(augment_mode, prompt_template, image_label, image_cat
     
     elif augment_mode == "negative":
         random.shuffle(sample_categories)
-        sample_instructions = [category2instruction[category] for category in sample_categories]
+        sample_instructions = sample_categories
+        # sample_instructions = [category2instruction[category] for category in sample_categories]
         
         sample_instructions_text = "\n".join(sample_instructions)
         
@@ -52,7 +64,7 @@ def design_prompt_template(augment_mode, prompt_template, image_label, image_cat
         output_prompt = "Safety Status: Safe, Unsafe Category: None"
         return input_prompt, output_prompt
         
-def prepare_instructions_for_llava(mode, seed):
+def prepare_instructions_for_llava(mode):
 
     base_dir = os.path.dirname(os.path.dirname(__file__))
     image_root = os.path.join(base_dir, "data", "UnsafeBench")
@@ -66,10 +78,10 @@ def prepare_instructions_for_llava(mode, seed):
     
     data_comprehensive = []
     unsafe_data = []
+    
+    idx = 0
     for category, instruction in zip(categories, instructions):
-
-        data = []
-        idx = 0
+        
         for source in sources:
             dataset = UnsafeBenchDataset(image_root=image_root, source=source, category=category, partition="train")
             for _, item in enumerate(dataset):
@@ -81,7 +93,7 @@ def prepare_instructions_for_llava(mode, seed):
                     unsafe_data.append([image_fname, label, category])
                 
                 # perturb order and number of categories      
-                prompt, gpt_output = design_prompt_template("original", prompt_template, label, category, category2instruction)
+                prompt, gpt_output = design_prompt_template(idx, "original", prompt_template, label, category, category2instruction)
                 
                 final_prompt = [{"from": "human", "value": f"<image>\n{prompt}"}, {"from":"gpt", "value": gpt_output}]
                 data_comprehensive.append(
@@ -95,7 +107,7 @@ def prepare_instructions_for_llava(mode, seed):
                 # data augmentation: remove certain category and change the label of originally unsafe image to Safe
                 if mode == "negative_sampling":
                     if label == "Unsafe":
-                        prompt, gpt_output = design_prompt_template("negative", prompt_template, label, category, category2instruction)
+                        prompt, gpt_output = design_prompt_template(idx, "negative", prompt_template, label, category, category2instruction)
                         final_prompt = [{"from": "human", "value": f"<image>\n{prompt}"}, {"from":"gpt", "value": gpt_output}]
                         data_comprehensive.append(
                             {
@@ -119,12 +131,12 @@ def prepare_instructions_for_llava(mode, seed):
     
     print(f"there are {safe_num} safe data and {unsafe_num} unsafe data")
     
-    add_unsafe_num = max((safe_num - unsafe_num), len(unsafe_data))
+    add_unsafe_num = max((safe_num - unsafe_num), 0)
     add_unsafe_data = random.choices(unsafe_data, k=add_unsafe_num)
     print(f"add {add_unsafe_num} data to balance the dataset")
     
     for (image_fname, label, category) in add_unsafe_data:
-        prompt, gpt_output = design_prompt_template("original", prompt_template, label, category, category2instruction)
+        prompt, gpt_output = design_prompt_template(idx, "original", prompt_template, label, category, category2instruction)
         
         final_prompt = [{"from": "human", "value": f"<image>\n{prompt}"}, {"from":"gpt", "value": gpt_output}]
         data_comprehensive.append(
@@ -134,25 +146,21 @@ def prepare_instructions_for_llava(mode, seed):
                 "conversations": final_prompt
             }
         )
-    
+        
+        idx += 1
+        
     # lastly, shuffle it
-    random.seed(seed)
     random.shuffle(data_comprehensive)
     
     safe_num = get_data_num(data_comprehensive, safe=True)
     unsafe_num = get_data_num(data_comprehensive, safe=False)
-    print(f"there are {safe_num} safe data and {unsafe_num} unsafe data")
+    print(f"safe: {safe_num}, unsafe: {unsafe_num}, total: {len(data_comprehensive)}")
     
     return data_comprehensive
 
 if __name__ == "__main__":
     
-    seed = 2023
     mode = "negative_sampling"
-    
-    # construct training set v1 
+    data = prepare_instructions_for_llava(mode)
 
-    data = prepare_instructions_for_llava(mode, seed)
-            
     json.dump(data, open(f"prompts/training_prompts.json", "w"), indent=2)
-    print(len(data), "data prepared for llava training")
