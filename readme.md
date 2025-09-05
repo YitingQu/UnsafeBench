@@ -235,7 +235,7 @@ print(image, label) # 0 safe, 1 unsafe
 ├── utils.py                  # Helper functions
 ├── data/                     # Dataset storage
 ├── outputs/                  # Evaluation results
-├── scripts/                  # Utility scripts
+├── PerspectiveVision/        # PerspectiveVision
 ```
 
 ## 📝 License
