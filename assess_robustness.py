@@ -134,7 +134,7 @@ def main(args):
 
     # save results
     out_path = os.path.join(args.save_dir, f"robustness_conventional_classifiers_{source}.xlsx")
-    result_df.to_excel(out_path, index=False)
+    result_df.to_excel(out_path)
     print(f"results saved to {out_path}")
     
 if __name__ == "__main__":

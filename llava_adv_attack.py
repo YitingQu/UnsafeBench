@@ -179,5 +179,5 @@ print(result_df)
 
 # save results
 out_path = os.path.join(args.save_dir, f"robustness_LLaVA.xlsx")
-result_df.to_excel(out_path, index=False)
+result_df.to_excel(out_path)
 print(f"results saved to {out_path}")

@@ -193,7 +193,7 @@ def main(args):
         # save to excel
         src_tag = "_".join(sources)  # e.g. Laion5B_Lexica
         out_path = os.path.join(args.save_dir, f"effectiveness_{src_tag}.xlsx")
-        result_df.to_excel(out_path, index=False)
+        result_df.to_excel(out_path)
 
         print("Saved results to:", out_path)
 

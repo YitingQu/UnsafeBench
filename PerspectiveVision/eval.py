@@ -223,7 +223,7 @@ def main(args):
     print(result_df)
     
     out_path = os.path.join(args.save_dir, f"eval_PerspectiveVision.xlsx")
-    result_df.to_excel(out_path, index=False)
+    result_df.to_excel(out_path)
     print(f"results saved to {out_path}")
     
 if __name__ == "__main__":
