@@ -171,8 +171,13 @@ for source in SOURCES:
         print(f"Results saved to {args.save_dir}/llava_{source}_{attack_type}_{args.seed}.json")
         
         RA = 1 - np.mean(is_adv_list)
-        result_df.loc[source, attack_type] = RA
+        result_df.loc[source, attack_type] = np.round(RA, 3)
         print(source, attack_type, "Robust Accuracy:", np.round(RA, 3))
 
 print("Summary of Robust Accuracy for LLaVA:")
 print(result_df)
+
+# save results
+out_path = os.path.join(args.save_dir, f"robustness_LLaVA.xlsx")
+result_df.to_excel(out_path, index=False)
+print(f"results saved to {out_path}")

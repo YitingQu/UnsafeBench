@@ -184,10 +184,18 @@ def main(args):
         else:
             raise NotImplementedError
         
+    # summarize results
     for sources in [["Laion5B"],["Lexica"], ["Laion5B","Lexica"]]:
         result_df = describe_results(args.classifiers, sources, args.save_dir)
         print("="*10+" Data sources: "+",".join(sources)+"="*10)
         print(result_df)
+
+        # save to excel
+        src_tag = "_".join(sources)  # e.g. Laion5B_Lexica
+        out_path = os.path.join(args.save_dir, f"effectiveness_{src_tag}.xlsx")
+        result_df.to_excel(out_path, index=False)
+
+        print("Saved results to:", out_path)
 
 if __name__ == "__main__":
     import argparse

@@ -222,7 +222,10 @@ def main(args):
     print("Overall result:")
     print(result_df)
     
-        
+    out_path = os.path.join(args.save_dir, f"eval_PerspectiveVision.xlsx")
+    result_df.to_excel(out_path, index=False)
+    print(f"results saved to {out_path}")
+    
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()

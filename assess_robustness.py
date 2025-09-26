@@ -96,12 +96,20 @@ def main(args):
 
     Path(args.save_dir).mkdir(parents=True, exist_ok=True)
     result_df = pd.DataFrame()
-    
+        
+    source = args.source
     for classifier_name in args.classifiers:
 
-        for source in SOURCES:
-            for attack_name in args.attack_types:
-                
+        for attack_name in args.attack_types:
+            
+            if os.path.exists(os.path.join(args.save_dir, f"{classifier_name}_{source}_{attack_name}_{args.seed}.json")):
+                is_adv_list = json.load(open(os.path.join(args.save_dir, f"{classifier_name}_{source}_{attack_name}_{args.seed}.json")))
+                is_adv_list = is_adv_list["is_adv_list"]
+                RA = 1 - np.mean(is_adv_list)
+                result_df.loc[classifier_name, attack_name] = np.round(RA, 3)
+                continue
+            
+            else:
                 is_adv_list = launch_attack(classifier_name=classifier_name, 
                                             source=source,
                                             attack_name=attack_name, 
@@ -114,22 +122,28 @@ def main(args):
                 result = {"is_adv_list": is_adv_list}
                 # calculate robust accuracy
                 RA = 1 - np.mean(is_adv_list)
-                result_df.loc[source, classifier_name] = RA
+                result_df.loc[classifier_name, attack_name] = RA
                 print(source, classifier_name, attack_name, "Robust Accuracy:", np.round(RA, 3))
 
                 with open(os.path.join(args.save_dir, f"{classifier_name}_{source}_{attack_name}_{args.seed}.json"), "w") as f:
                     json.dump(result, f)
                 print(f"{classifier_name}_{source}_{attack_name} is done")
     
-    print("The summary of robust accuracy:")
+    print(f"The summary of robust accuracy (source: {source}):")
     print(result_df)
 
+    # save results
+    out_path = os.path.join(args.save_dir, f"robustness_conventional_classifiers_{source}.xlsx")
+    result_df.to_excel(out_path, index=False)
+    print(f"results saved to {out_path}")
+    
 if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--classifiers", nargs="+", default=["Q16", "MultiHeaded", "SD_Filter", "NSFW_Detector", "NudeNet"])
     parser.add_argument("--attack_types", nargs="+", default=["GN", "FGSM", "PGD", "DeepFool"])
+    parser.add_argument("--source", type=str, default="Laion5B")
     parser.add_argument("--eps", type=float, default=0.01, help="the maximum perturbation for each pixel")
     parser.add_argument("--K", type=int, default=500, help="the number of samples to attack")
     parser.add_argument("--batch_size", type=int, default=32)
@@ -139,4 +153,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     main(args)
-    

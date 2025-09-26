@@ -124,8 +124,14 @@ for source in SOURCES:
         json.dump(result, open(f"{args.save_dir}/instructblip_{source}_{attack_type}_{args.seed}.json", "w"))
         print(f"Results saved to {args.save_dir}/instructblip_{source}_{attack_type}_{args.seed}.json")
         
-        result_df.loc[source, attack_type] = np.mean(is_adv_list)
-        print(source, attack_type, "Robust Accuracy:", np.round(np.mean(is_adv_list), 3))
+        RA = 1 - np.mean(is_adv_list)
+        result_df.loc[source, attack_type] = np.round(RA, 3)
+        print(source, attack_type, "Robust Accuracy:", RA)
 
-print("Summary of Robust Accuracy for LLaVA:")
+print("Summary of Robust Accuracy for InstructBLIP:")
 print(result_df)
+
+# save results
+out_path = os.path.join(args.save_dir, f"robustness_InstructBLIP.xlsx")
+result_df.to_excel(out_path, index=False)
+print(f"results saved to {out_path}")
