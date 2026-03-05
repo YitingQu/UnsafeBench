@@ -44,7 +44,7 @@ export OPENAI_API_KEY=sk-proj-xxx   # optional
 
 ## 🎯 UnsafeBench Evaluation
 
-**Attention: due to ethical considerations, the UnsafeBench dataset is provided for research or education purposes only. To use it, please first request access from the Hugging Face: [link](https://huggingface.co/datasets/yiting/UnsafeBench)**
+**Attention: due to ethical considerations, the UnsafeBench dataset is provided for research/education purposes and responsible commercial use. To use it, please first request access from the Hugging Face: [link](https://huggingface.co/datasets/yiting/UnsafeBench)**
 
 ### Effectiveness Evaluation
 
